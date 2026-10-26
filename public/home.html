@@ -188,6 +188,10 @@
         .modal .error-message { color: rgb(180, 40, 40); font-size: 14px; min-height: 18px; margin: 8px 0 0 0; }
         .modal .success-message { color: rgb(30, 110, 30); font-size: 14px; margin: 8px 0 0 0; }
 
+        .sort-box { margin-top: 20px; }
+        .sort-box label { display: block; font-weight: bold; margin-bottom: 6px; }
+        .sort-box select { width: 100%; padding: 9px; border-radius: 5px; border: 1px solid gray; font-size: 15px; background: white; }
+
         /* ---------- Tablets ---------- */
         @media (max-width: 1100px) {
             .products { grid-template-columns: repeat(3, 1fr); }
@@ -202,6 +206,9 @@
             .sidebar { width: 100%; min-height: 0; padding: 12px 15px; display: flex; gap: 8px; overflow-x: auto; }
             .sidebar h2 { display: none; }
             .category { margin: 0; white-space: nowrap; }
+            .sort-box { margin: 0 0 0 8px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+            .sort-box label { margin: 0; }
+            .sort-box select { width: auto; }
             .products { grid-template-columns: repeat(2, 1fr); padding: 12px; gap: 12px; }
         }
 
@@ -237,6 +244,15 @@
             <div class="category" data-category="Cases">Cases</div>
             <div class="category" data-category="PSU">PSU</div>
             <div class="category" data-category="Other">Other</div>
+
+            <div class="sort-box">
+                <label for="sortSelect">Sort by price</label>
+                <select id="sortSelect">
+                    <option value="default">Newest first</option>
+                    <option value="asc">Price: low to high</option>
+                    <option value="desc">Price: high to low</option>
+                </select>
+            </div>
         </div>
 
         <div class="products" id="productsGrid"></div>
@@ -291,6 +307,7 @@
     <script>
         let allProducts = [];
         let activeCategory = 'All';
+        let sortOrder = 'default';
         let currentUser = null;
 
         function esc(s) {
@@ -495,6 +512,9 @@
                 (!term || p.name.toLowerCase().includes(term))
             );
 
+            if (sortOrder === 'asc') filtered.sort((a, b) => Number(a.price) - Number(b.price));
+            if (sortOrder === 'desc') filtered.sort((a, b) => Number(b.price) - Number(a.price));
+
             if (filtered.length === 0) {
                 grid.innerHTML = '<p class="empty-message">No products found.</p>';
                 return;
@@ -547,6 +567,10 @@
         });
 
         document.getElementById('searchInput').addEventListener('input', renderProducts);
+        document.getElementById('sortSelect').addEventListener('change', e => {
+            sortOrder = e.target.value;
+            renderProducts();
+        });
 
         updateCartCount();
         renderPlaceholders();

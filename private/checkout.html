@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Parts Partner - Checkout</title>
+    <style>
+        body { margin: 0; font-family: "Gill Sans", "Gill Sans MT", Calibri, sans-serif; background-color: rgb(221, 238, 245); }
+        .header { min-height: 100px; background-color: white; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 30px; box-sizing: border-box; }
+        .logo { height: 80px; cursor: pointer; }
+        .header button { padding: 10px 18px; border: none; border-radius: 5px; background-color: rgb(240, 240, 240); cursor: pointer; font-size: 15px; }
+        .container { max-width: 600px; margin: 40px auto; padding: 30px; background-color: white; border-radius: 10px; box-sizing: border-box; }
+        .container h2 { margin-top: 0; }
+        label { display: block; margin: 15px 0 5px 0; font-weight: bold; }
+        input, textarea { width: 100%; padding: 10px; border-radius: 5px; border: 1px solid gray; font-size: 16px; box-sizing: border-box; font-family: inherit; }
+        .order-line { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; }
+        .order-total { display: flex; justify-content: space-between; font-weight: bold; font-size: 18px; border-top: 1px solid rgb(230, 230, 230); margin-top: 10px; padding-top: 10px; }
+        .pay-btn { width: 100%; padding: 14px; margin-top: 25px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; background-color: rgb(180, 220, 235); }
+        .pay-btn:hover { background-color: rgb(150, 200, 220); }
+        .pay-btn:disabled { background-color: rgb(220, 220, 220); cursor: not-allowed; }
+        .error-message { color: rgb(180, 40, 40); margin-top: 10px; }
+        @media (max-width: 640px) {
+            .header { padding: 10px 15px; justify-content: center; }
+            .logo { height: 60px; }
+            .container { margin: 15px; padding: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img class="logo" src="Images/Logo.jpg" alt="Logo" onclick="window.location.href='home.html'">
+        <button onclick="window.location.href='cart.html'">Back to Cart</button>
+    </div>
+
+    <div class="container">
+        <h2>Order Summary</h2>
+        <div id="orderLines"></div>
+        <div class="order-total"><span>Total</span><span>R<span id="orderTotal">0.00</span></span></div>
+
+        <h2>Delivery Details</h2>
+        <label for="fullName">Full Name</label>
+        <input type="text" id="fullName" autocomplete="name">
+
+        <label for="email">Email</label>
+        <input type="email" id="email" autocomplete="email">
+
+        <label for="address">Delivery Address</label>
+        <textarea id="address" rows="3" autocomplete="street-address"></textarea>
+
+        <button class="pay-btn" id="payBtn" onclick="payWithPayfast()">Pay with PayFast</button>
+        <p class="error-message" id="errorMsg"></p>
+    </div>
+
+    <script>
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        function getCart() { return JSON.parse(localStorage.getItem('cart') || '[]'); }
+
+        // The total shown here is for display only. The server works out the real
+        // total from the database prices when the order is created.
+        function renderOrder() {
+            const cart = getCart();
+            const linesDiv = document.getElementById('orderLines');
+            let total = 0;
+
+            if (cart.length === 0) {
+                linesDiv.innerHTML = '<p>Your cart is empty. <a href="home.html">Go shopping</a>.</p>';
+                document.getElementById('payBtn').disabled = true;
+            }
+            cart.forEach(item => {
+                total += item.price * item.quantity;
+                const line = document.createElement('div');
+                line.className = 'order-line';
+                line.innerHTML = `<span>${esc(item.name)} x${Number(item.quantity)}</span><span>R${(item.price * item.quantity).toFixed(2)}</span>`;
+                linesDiv.appendChild(line);
+            });
+            document.getElementById('orderTotal').textContent = total.toFixed(2);
+        }
+        renderOrder();
+
+        if (new URLSearchParams(window.location.search).get('status') === 'cancelled') {
+            document.getElementById('errorMsg').textContent = 'Payment was cancelled. You can try again.';
+        }
+
+        async function post(url, body) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (response.status === 401) { window.location.href = 'home.html'; return null; }
+            const data = await response.json().catch(() => ({}));
+            return { ok: response.ok, data };
+        }
+
+        async function payWithPayfast() {
+            const errorMsg = document.getElementById('errorMsg');
+            const payBtn = document.getElementById('payBtn');
+            errorMsg.textContent = '';
+
+            const cart = getCart();
+            const fullName = document.getElementById('fullName').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const address = document.getElementById('address').value.trim();
+
+            if (cart.length === 0) { errorMsg.textContent = 'Your cart is empty.'; return; }
+            if (!fullName || !email || !address) { errorMsg.textContent = 'Please fill in all delivery details.'; return; }
+
+            payBtn.disabled = true;
+            try {
+                const order = await post('/api/orders', {
+                    items: cart.map(i => ({ productId: i.id, quantity: i.quantity })),
+                    deliveryAddress: `${fullName}\n${address}`,
+                });
+                if (!order) return;
+                if (!order.ok) { errorMsg.textContent = order.data.error || 'Could not create order.'; payBtn.disabled = false; return; }
+
+                const pay = await post('/api/payfast/initiate', { orderId: order.data.order.id, buyerEmail: email });
+                if (!pay) return;
+                if (!pay.ok) { errorMsg.textContent = pay.data.error || 'Could not start payment.'; payBtn.disabled = false; return; }
+
+                // The order is created, so the cart can be cleared before leaving for PayFast
+                localStorage.removeItem('cart');
+
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = pay.data.payfastUrl;
+                Object.entries(pay.data.fields).forEach(([key, value]) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = value;
+                    form.appendChild(input);
+                });
+                document.body.appendChild(form);
+                form.submit();
+            } catch (err) {
+                errorMsg.textContent = 'Something went wrong starting payment.';
+                payBtn.disabled = false;
+                console.error(err);
+            }
+        }
+    </script>
+</body>
+</html>

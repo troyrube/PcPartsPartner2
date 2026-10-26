@@ -1,0 +1,12 @@
+{
+  "outputDirectory": "public",
+  "functions": {
+    "api/page.js": { "includeFiles": "private/**" }
+  },
+  "rewrites": [
+    { "source": "/cart.html",     "destination": "/api/page?name=cart" },
+    { "source": "/checkout.html", "destination": "/api/page?name=checkout" },
+    { "source": "/orders.html",   "destination": "/api/page?name=orders" },
+    { "source": "/admin.html",    "destination": "/api/page?name=admin" }
+  ]
+}

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Parts Partner - Admin</title>
+    <style>
+        body { margin: 0; font-family: "Gill Sans", "Gill Sans MT", Calibri, sans-serif; background-color: rgb(221, 238, 245); }
+        .header { min-height: 100px; background-color: white; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 30px; box-sizing: border-box; }
+        .logo { height: 80px; cursor: pointer; }
+        .header h1 { font-size: 22px; margin: 0; }
+        .header button { padding: 10px 18px; border: none; border-radius: 5px; background-color: rgb(240, 240, 240); cursor: pointer; font-size: 15px; }
+        .container { max-width: 1100px; margin: 30px auto; padding: 0 20px; display: grid; grid-template-columns: 350px 1fr; gap: 25px; align-items: start; }
+        .form-card, .list-card { background-color: white; border-radius: 10px; padding: 20px; }
+        .list-card + .list-card { margin-top: 25px; }
+        .right { min-width: 0; }
+        label { display: block; margin: 12px 0 5px 0; font-weight: bold; font-size: 14px; }
+        input, select, textarea { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid gray; font-size: 15px; box-sizing: border-box; font-family: inherit; }
+        .save-btn { width: 100%; padding: 12px; margin-top: 14px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; background-color: rgb(180, 220, 235); }
+        .save-btn:hover { background-color: rgb(150, 200, 220); }
+        .save-btn.secondary { background-color: rgb(235, 235, 235); margin-top: 8px; }
+        .product-row { display: flex; align-items: center; gap: 15px; padding: 10px 0; border-bottom: 1px solid rgb(235, 235, 235); }
+        .product-row img { width: 50px; height: 50px; object-fit: contain; }
+        .product-row .info { flex: 1; min-width: 0; }
+        .product-row button { border: none; border-radius: 5px; padding: 6px 12px; cursor: pointer; }
+        .edit-btn { background-color: rgb(230, 230, 230); margin-right: 5px; }
+        .delete-btn { background-color: rgb(250, 210, 210); }
+        .order-row { padding: 8px 0; border-bottom: 1px solid rgb(235, 235, 235); font-size: 15px; }
+        .error-message { color: rgb(180, 40, 40); margin-top: 10px; }
+        .hint { font-size: 13px; color: gray; margin: 4px 0 0 0; }
+        @media (max-width: 860px) {
+            .header { padding: 10px 15px; justify-content: center; }
+            .logo { height: 60px; }
+            .container { grid-template-columns: 1fr; margin: 15px auto; }
+            .product-row { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img class="logo" src="Images/Logo.jpg" alt="Logo" onclick="window.location.href='home.html'">
+        <h1>Admin - Manage Store</h1>
+        <button onclick="window.location.href='home.html'">View Shop</button>
+    </div>
+
+    <div class="container">
+        <div class="form-card">
+            <h2 id="formTitle">Add Product</h2>
+            <input type="hidden" id="productId">
+
+            <label for="name">Name</label>
+            <input type="text" id="name">
+
+            <label for="price">Price (R)</label>
+            <input type="number" id="price" step="0.01" min="0">
+
+            <label for="category">Category</label>
+            <select id="category">
+                <option>GPU</option><option>CPU</option><option>Motherboard</option>
+                <option>RAM</option><option>Cases</option><option>PSU</option><option>Other</option>
+            </select>
+
+            <label for="stock">Stock Quantity</label>
+            <input type="number" id="stock" value="0" min="0" step="1">
+
+            <label for="description">Description</label>
+            <textarea id="description" rows="3"></textarea>
+
+            <label for="imageFile">Product Image</label>
+            <input type="file" id="imageFile" accept="image/*">
+            <p class="hint">Max 3 MB. Leave empty to keep the current image when editing.</p>
+            <input type="hidden" id="imageUrl">
+
+            <button class="save-btn" onclick="saveProduct()">Save Product</button>
+            <button class="save-btn secondary" onclick="resetForm()">Clear</button>
+            <p class="error-message" id="formError"></p>
+        </div>
+
+        <div class="right">
+            <div class="list-card">
+                <h2>Current Stock</h2>
+                <div id="productList">Loading...</div>
+            </div>
+            <div class="list-card">
+                <h2>Recent Orders</h2>
+                <div id="orderList">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let products = [];
+
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        // All admin API calls rely on the server-side login cookie (sent automatically).
+        async function api(url, options = {}) {
+            const response = await fetch(url, {
+                ...options,
+                headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+            });
+            if (response.status === 401 || response.status === 403) {
+                window.location.href = 'home.html';
+                return null;
+            }
+            const data = response.status === 204 ? {} : await response.json().catch(() => ({}));
+            return { ok: response.ok, data };
+        }
+
+        async function loadProducts() {
+            const listDiv = document.getElementById('productList');
+            const result = await api('/api/products');
+            if (!result) return;
+            products = result.data.products || [];
+
+            if (products.length === 0) { listDiv.innerHTML = '<p>No products yet. Add your first one on the left.</p>'; return; }
+
+            listDiv.innerHTML = '';
+            products.forEach(p => {
+                const row = document.createElement('div');
+                row.className = 'product-row';
+                row.innerHTML = `
+                    <img src="${esc(p.image_url || 'Images/Logo.jpg')}" alt="${esc(p.name)}">
+                    <div class="info">
+                        <strong>${esc(p.name)}</strong><br>
+                        R${Number(p.price).toFixed(2)} &middot; ${esc(p.category)} &middot; Stock: ${Number(p.stock)}
+                    </div>
+                    <div>
+                        <button class="edit-btn">Edit</button>
+                        <button class="delete-btn">Delete</button>
+                    </div>
+                `;
+                row.querySelector('.edit-btn').onclick = () => editProduct(p.id);
+                row.querySelector('.delete-btn').onclick = () => deleteProduct(p.id);
+                listDiv.appendChild(row);
+            });
+        }
+
+        async function loadOrders() {
+            const listDiv = document.getElementById('orderList');
+            const result = await api('/api/orders?all=1');
+            if (!result) return;
+            const orders = result.data.orders || [];
+            if (orders.length === 0) { listDiv.innerHTML = '<p>No orders yet.</p>'; return; }
+
+            listDiv.innerHTML = '';
+            orders.forEach(o => {
+                const row = document.createElement('div');
+                row.className = 'order-row';
+                row.innerHTML = `
+                    <strong>${esc(String(o.id).slice(0, 8))}</strong> &middot;
+                    ${esc(o.users ? o.users.username : 'unknown')} &middot;
+                    R${Number(o.total).toFixed(2)} &middot;
+                    ${esc(o.payment_status)} &middot;
+                    ${esc(new Date(o.created_at).toLocaleDateString())}
+                `;
+                listDiv.appendChild(row);
+            });
+        }
+
+        function editProduct(id) {
+            const p = products.find(x => x.id === id);
+            if (!p) return;
+            document.getElementById('formTitle').textContent = 'Edit Product';
+            document.getElementById('productId').value = p.id;
+            document.getElementById('name').value = p.name;
+            document.getElementById('price').value = p.price;
+            document.getElementById('category').value = p.category;
+            document.getElementById('stock').value = p.stock;
+            document.getElementById('description').value = p.description || '';
+            document.getElementById('imageUrl').value = p.image_url || '';
+            document.getElementById('imageFile').value = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function resetForm() {
+            document.getElementById('formTitle').textContent = 'Add Product';
+            ['productId', 'name', 'price', 'description', 'imageFile', 'imageUrl'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('category').value = 'GPU';
+            document.getElementById('stock').value = 0;
+            document.getElementById('formError').textContent = '';
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function saveProduct() {
+            const errorEl = document.getElementById('formError');
+            errorEl.textContent = '';
+
+            const id = document.getElementById('productId').value;
+            const name = document.getElementById('name').value.trim();
+            const price = parseFloat(document.getElementById('price').value);
+            const category = document.getElementById('category').value;
+            const stock = parseInt(document.getElementById('stock').value, 10);
+            const description = document.getElementById('description').value.trim();
+            let imageUrl = document.getElementById('imageUrl').value;
+            const imageFile = document.getElementById('imageFile').files[0];
+
+            if (!name || !(price > 0)) { errorEl.textContent = 'Name and a price above 0 are required.'; return; }
+            if (!Number.isInteger(stock) || stock < 0) { errorEl.textContent = 'Stock must be 0 or more.'; return; }
+            if (imageFile && imageFile.size > 3 * 1024 * 1024) { errorEl.textContent = 'Image is too big. Please use one under 3 MB.'; return; }
+
+            try {
+                if (imageFile) {
+                    const upload = await api('/api/products/upload-image', {
+                        method: 'POST',
+                        body: JSON.stringify({ fileName: imageFile.name, fileBase64: await fileToBase64(imageFile) }),
+                    });
+                    if (!upload) return;
+                    if (!upload.ok) { errorEl.textContent = upload.data.error || 'Image upload failed.'; return; }
+                    imageUrl = upload.data.url;
+                }
+
+                const result = await api(id ? `/api/products/${id}` : '/api/products', {
+                    method: id ? 'PUT' : 'POST',
+                    body: JSON.stringify({ name, price, category, stock, description, imageUrl }),
+                });
+                if (!result) return;
+                if (!result.ok) { errorEl.textContent = result.data.error || 'Could not save product.'; return; }
+
+                resetForm();
+                loadProducts();
+            } catch (err) {
+                errorEl.textContent = 'Something went wrong.';
+                console.error(err);
+            }
+        }
+
+        async function deleteProduct(id) {
+            if (!confirm('Delete this product?')) return;
+            const result = await api(`/api/products/${id}`, { method: 'DELETE' });
+            if (result && !result.ok) alert(result.data.error || 'Could not delete product.');
+            loadProducts();
+        }
+
+        loadProducts();
+        loadOrders();
+    </script>
+</body>
+</html>

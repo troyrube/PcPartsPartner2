@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Parts Partner - Cart</title>
+    <style>
+        body { margin: 0; font-family: "Gill Sans", "Gill Sans MT", Calibri, sans-serif; background-color: rgb(221, 238, 245); }
+        .header { min-height: 100px; background-color: white; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 30px; box-sizing: border-box; }
+        .logo { height: 80px; cursor: pointer; }
+        .header h1 { font-size: 22px; margin: 0; }
+        .header button { padding: 10px 18px; border: none; border-radius: 5px; background-color: rgb(240, 240, 240); cursor: pointer; font-size: 15px; }
+        .container { max-width: 900px; margin: 30px auto; padding: 0 20px; }
+        .cart-item { background-color: white; border-radius: 10px; padding: 15px 20px; margin-bottom: 15px; display: flex; align-items: center; gap: 20px; }
+        .cart-item img { width: 90px; height: 90px; object-fit: contain; }
+        .item-info { flex: 1; }
+        .item-info h3 { margin: 0 0 5px 0; }
+        .qty-controls { display: flex; align-items: center; gap: 10px; }
+        .qty-controls button { width: 28px; height: 28px; border: none; border-radius: 5px; background-color: rgb(240, 240, 240); cursor: pointer; font-size: 16px; }
+        .qty-controls button:hover { background-color: lightgray; }
+        .remove-btn { border: none; background: none; color: rgb(180, 40, 40); cursor: pointer; font-size: 14px; text-decoration: underline; padding: 6px 0; }
+        .item-price { font-weight: bold; font-size: 18px; min-width: 110px; text-align: right; }
+        .summary { background-color: white; border-radius: 10px; padding: 20px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap; margin-top: 20px; }
+        .summary .total { font-size: 22px; font-weight: bold; }
+        .checkout-btn { padding: 12px 25px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; background-color: rgb(180, 220, 235); }
+        .checkout-btn:hover { background-color: rgb(150, 200, 220); }
+        .checkout-btn:disabled { background-color: rgb(220, 220, 220); cursor: not-allowed; }
+        .empty-message { text-align: center; font-size: 18px; color: gray; margin-top: 60px; }
+        @media (max-width: 600px) {
+            .header { padding: 10px 15px; justify-content: center; }
+            .logo { height: 60px; }
+            .cart-item { flex-wrap: wrap; padding: 12px; gap: 12px; }
+            .cart-item img { width: 70px; height: 70px; }
+            .item-price { min-width: 0; width: 100%; text-align: left; }
+            .checkout-btn { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img class="logo" src="Images/Logo.jpg" alt="Logo" onclick="window.location.href='home.html'">
+        <h1>Your Cart</h1>
+        <button onclick="window.location.href='home.html'">Continue Shopping</button>
+    </div>
+
+    <div class="container">
+        <div id="cartItems"></div>
+        <div class="summary">
+            <div class="total">Total: R<span id="cartTotal">0.00</span></div>
+            <button class="checkout-btn" id="checkoutBtn" onclick="window.location.href='checkout.html'">Checkout</button>
+        </div>
+    </div>
+
+    <script>
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        function getCart() { return JSON.parse(localStorage.getItem('cart') || '[]'); }
+        function saveCart(cart) { localStorage.setItem('cart', JSON.stringify(cart)); }
+
+        function renderCart() {
+            const cart = getCart();
+            const container = document.getElementById('cartItems');
+            const checkoutBtn = document.getElementById('checkoutBtn');
+            container.innerHTML = '';
+
+            if (cart.length === 0) {
+                container.innerHTML = '<p class="empty-message">Your cart is empty.</p>';
+                checkoutBtn.disabled = true;
+                document.getElementById('cartTotal').textContent = '0.00';
+                return;
+            }
+
+            checkoutBtn.disabled = false;
+            let total = 0;
+
+            cart.forEach((item, index) => {
+                total += item.price * item.quantity;
+                const div = document.createElement('div');
+                div.className = 'cart-item';
+                div.innerHTML = `
+                    <img src="${esc(item.image)}" alt="${esc(item.name)}">
+                    <div class="item-info">
+                        <h3>${esc(item.name)}</h3>
+                        <div class="qty-controls">
+                            <button data-act="minus">-</button>
+                            <span>${Number(item.quantity)}</span>
+                            <button data-act="plus">+</button>
+                        </div>
+                        <button class="remove-btn" data-act="remove">Remove</button>
+                    </div>
+                    <div class="item-price">R${(item.price * item.quantity).toFixed(2)}</div>
+                `;
+                div.querySelector('[data-act="minus"]').onclick = () => changeQty(index, -1);
+                div.querySelector('[data-act="plus"]').onclick = () => changeQty(index, 1);
+                div.querySelector('[data-act="remove"]').onclick = () => removeItem(index);
+                container.appendChild(div);
+            });
+
+            document.getElementById('cartTotal').textContent = total.toFixed(2);
+        }
+
+        function changeQty(index, delta) {
+            const cart = getCart();
+            cart[index].quantity += delta;
+            if (cart[index].quantity <= 0) cart.splice(index, 1);
+            saveCart(cart);
+            renderCart();
+        }
+
+        function removeItem(index) {
+            const cart = getCart();
+            cart.splice(index, 1);
+            saveCart(cart);
+            renderCart();
+        }
+
+        renderCart();
+    </script>
+</body>
+</html>

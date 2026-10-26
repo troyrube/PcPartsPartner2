@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Parts Partner - My Orders</title>
+    <style>
+        body { margin: 0; font-family: "Gill Sans", "Gill Sans MT", Calibri, sans-serif; background-color: rgb(221, 238, 245); }
+        .header { min-height: 100px; background-color: white; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 30px; box-sizing: border-box; }
+        .logo { height: 80px; cursor: pointer; }
+        .header h1 { font-size: 22px; margin: 0; }
+        .header button { padding: 10px 18px; border: none; border-radius: 5px; background-color: rgb(240, 240, 240); cursor: pointer; font-size: 15px; }
+        .container { max-width: 800px; margin: 30px auto; padding: 0 20px; }
+        .banner { background: rgb(210, 240, 210); color: rgb(30, 110, 30); padding: 12px 16px; border-radius: 8px; margin-bottom: 15px; }
+        .order-card { background-color: white; border-radius: 10px; padding: 20px; margin-bottom: 15px; }
+        .order-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: bold; margin-bottom: 10px; }
+        .status { padding: 4px 10px; border-radius: 5px; font-size: 14px; }
+        .status.complete { background-color: rgb(210, 240, 210); color: rgb(30, 110, 30); }
+        .status.pending { background-color: rgb(250, 235, 200); color: rgb(150, 110, 20); }
+        .status.failed { background-color: rgb(250, 210, 210); color: rgb(150, 30, 30); }
+        .items { margin: 8px 0; color: rgb(70, 70, 70); font-size: 15px; }
+        .empty-message { text-align: center; font-size: 18px; color: gray; margin-top: 60px; }
+        @media (max-width: 600px) {
+            .header { padding: 10px 15px; justify-content: center; }
+            .logo { height: 60px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img class="logo" src="Images/Logo.jpg" alt="Logo" onclick="window.location.href='home.html'">
+        <h1>My Orders</h1>
+        <button onclick="window.location.href='home.html'">Shop</button>
+    </div>
+
+    <div class="container" id="ordersContainer">
+        <p class="empty-message">Loading your orders...</p>
+    </div>
+
+    <script>
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        async function loadOrders() {
+            const container = document.getElementById('ordersContainer');
+            try {
+                const response = await fetch('/api/orders');
+                if (response.status === 401) { window.location.href = 'home.html'; return; }
+                const data = await response.json();
+
+                container.innerHTML = '';
+                if (new URLSearchParams(window.location.search).get('status') === 'success') {
+                    container.innerHTML = '<div class="banner">Thank you! Your payment is being confirmed. The status below updates automatically once PayFast confirms it.</div>';
+                }
+
+                if (!data.orders || data.orders.length === 0) {
+                    container.innerHTML += '<p class="empty-message">You haven\'t placed any orders yet.</p>';
+                    return;
+                }
+
+                data.orders.forEach(order => {
+                    const s = (order.payment_status || 'PENDING').toUpperCase();
+                    const cls = s === 'COMPLETE' ? 'complete' : (s === 'PENDING' ? 'pending' : 'failed');
+                    const items = (order.items || []).map(i => `${esc(i.name)} x${Number(i.quantity)}`).join(', ');
+
+                    const card = document.createElement('div');
+                    card.className = 'order-card';
+                    card.innerHTML = `
+                        <div class="order-header">
+                            <span>Order ${esc(String(order.id).slice(0, 8))}</span>
+                            <span class="status ${cls}">${esc(s)}</span>
+                        </div>
+                        <div class="items">${items}</div>
+                        <div>Total: R${Number(order.total).toFixed(2)}</div>
+                        <div>Placed: ${esc(new Date(order.created_at).toLocaleString())}</div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (err) {
+                container.innerHTML = '<p class="empty-message">Could not load orders right now.</p>';
+                console.error(err);
+            }
+        }
+        loadOrders();
+    </script>
+</body>
+</html>

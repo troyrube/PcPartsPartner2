@@ -17,11 +17,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Please enter your username and password.' });
   }
 
-  const { data: user } = await supabaseAdmin
+  const { data: user, error: lookupError } = await supabaseAdmin
     .from('users')
     .select('id, username, cellphone, password_hash, is_admin')
     .eq('username', username)
     .maybeSingle();
+
+  if (lookupError) {
+    console.error('Login lookup error:', lookupError);
+    return res.status(500).json({ error: 'Could not reach the database.', detail: lookupError.message });
+  }
 
   const valid = user && (await bcrypt.compare(password, user.password_hash));
   if (!valid) return res.status(401).json({ error: 'Invalid username or password.' });

@@ -1,5 +1,3 @@
-// PayFast calls this URL server-to-server (ITN) after a payment.
-// The browser's return page is NOT trusted to mark an order as paid.
 import { supabaseAdmin } from '../../lib/supabaseAdmin.js';
 
 export default async function handler(req, res) {
@@ -32,9 +30,40 @@ export default async function handler(req, res) {
       return res.status(400).end();
     }
 
-    // 3. Save the result (COMPLETE, FAILED, CANCELLED...)
-    await supabaseAdmin
-      .from('orders').update({ payment_status: params.payment_status }).eq('id', order.id);
+    // 3. Save the result 
+    const status = params.payment_status;
+
+    if (status === 'COMPLETE') {
+      // Only the FIRST 'complete' notification counts (PayFast can send it twice),
+      // so stock is reduced exactly once per order.
+      const { data: paid } = await supabaseAdmin
+        .from('orders')
+        .update({ payment_status: 'COMPLETE' })
+        .eq('id', order.id)
+        .neq('payment_status', 'COMPLETE')
+        .select('items')
+        .maybeSingle();
+
+      if (paid) {
+        for (const item of paid.items || []) {
+          const { data: product } = await supabaseAdmin
+            .from('products').select('stock').eq('id', item.productId).maybeSingle();
+          if (product) {
+            await supabaseAdmin
+              .from('products')
+              .update({ stock: Math.max(0, Number(product.stock) - Number(item.quantity)) })
+              .eq('id', item.productId);
+          }
+        }
+      }
+    } else {
+      // never downgrade an order that is already paid
+      await supabaseAdmin
+        .from('orders')
+        .update({ payment_status: status })
+        .eq('id', order.id)
+        .neq('payment_status', 'COMPLETE');
+    }
 
     return res.status(200).end();
   } catch (err) {
@@ -42,3 +71,4 @@ export default async function handler(req, res) {
     return res.status(500).end();
   }
 }
+

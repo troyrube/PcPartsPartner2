@@ -15,10 +15,13 @@ export default async function handler(req, res) {
       if (!session.admin) return res.status(403).json({ error: 'Admin access only.' });
       const { data, error } = await supabaseAdmin
         .from('orders')
-        .select('id, total, payment_status, created_at, delivery_address, users(username)')
+        .select('id, total, payment_status, order_status, sent_at, items, created_at, delivery_address, users(username, cellphone)')
         .order('created_at', { ascending: false })
-        .limit(50);
-      if (error) return res.status(500).json({ error: 'Could not load orders.' });
+        .limit(200);
+      if (error) {
+        console.error('Admin orders error:', error);
+        return res.status(500).json({ error: 'Could not load orders.', detail: error.message });
+      }
       return res.status(200).json({ orders: data });
     }
 
@@ -78,3 +81,4 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' });
 }
+

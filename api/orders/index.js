@@ -1,6 +1,7 @@
 // GET  /api/orders          -> the logged-in person's own orders
 // GET  /api/orders?all=1    -> admin only: every order, newest first
 // POST /api/orders          -> create an order  { items:[{productId, quantity}], deliveryAddress }
+// PATCH /api/orders         -> admin only: { id, status:'SENT'|'PROCESSING' } mark a paid order as sent
 //
 // Prices and the total are read from the database here, never trusted from the browser.
 import { supabaseAdmin } from '../../lib/supabaseAdmin.js';
@@ -79,6 +80,44 @@ export default async function handler(req, res) {
     return res.status(201).json({ order });
   }
 
+  if (req.method === 'PATCH') {
+    if (!session.admin) return res.status(403).json({ error: 'Admin access only.' });
+
+    const id = String(req.body?.id || '');
+    const status = String(req.body?.status || '').toUpperCase();
+    if (!id) return res.status(400).json({ error: 'Order id is required.' });
+    if (!['SENT', 'PROCESSING'].includes(status)) {
+      return res.status(400).json({ error: 'Status must be SENT or PROCESSING.' });
+    }
+
+    const { data: order, error: findError } = await supabaseAdmin
+      .from('orders').select('id, payment_status').eq('id', id).maybeSingle();
+    if (findError) {
+      console.error('Order lookup error:', findError);
+      return res.status(500).json({ error: 'Could not find the order.', detail: findError.message });
+    }
+    if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+    // unpaid orders can never be marked as sent
+    if (status === 'SENT' && order.payment_status !== 'COMPLETE') {
+      return res.status(400).json({ error: 'Only paid orders can be marked as sent.' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('orders')
+      .update({ order_status: status, sent_at: status === 'SENT' ? new Date().toISOString() : null })
+      .eq('id', id)
+      .select('id, order_status, sent_at')
+      .single();
+    if (error) {
+      console.error('Order update error:', error);
+      return res.status(500).json({
+        error: 'Could not update the order. Did you run the new SQL in Supabase?',
+        detail: error.message,
+      });
+    }
+    return res.status(200).json({ order: data });
+  }
+
   return res.status(405).json({ error: 'Method not allowed' });
 }
-

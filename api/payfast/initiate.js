@@ -1,11 +1,7 @@
-// POST /api/payfast/initiate  { orderId, buyerEmail? }
-// Builds the signed PayFast form fields on the server. The amount comes from
-// the order in the database, and the passphrase never reaches the browser.
 import crypto from 'crypto';
 import { supabaseAdmin } from '../../lib/supabaseAdmin.js';
 import { requireSession } from '../../lib/session.js';
 
-// Same encoding PayFast uses (PHP urlencode): uppercase hex, spaces as +
 function enc(value) {
   return encodeURIComponent(String(value).trim())
     .replace(/[!'()*~]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())
@@ -13,7 +9,6 @@ function enc(value) {
 }
 
 function buildSignature(fields, passphrase) {
-  // Fields MUST stay in PayFast's documented order.
   let query = Object.entries(fields)
     .filter(([, v]) => v !== '' && v !== undefined && v !== null)
     .map(([k, v]) => `${k}=${enc(v)}`)
@@ -36,7 +31,8 @@ export default async function handler(req, res) {
   }
 
   const email = String(req.body?.buyerEmail || '').trim();
-  const site = process.env.SITE_URL;
+  const host = req.headers.host;
+  const site = host ? `https://${host}` : process.env.SITE_URL;
 
   const fields = {
     merchant_id: process.env.PAYFAST_MERCHANT_ID,
@@ -56,3 +52,4 @@ export default async function handler(req, res) {
     fields: { ...fields, signature },
   });
 }
+

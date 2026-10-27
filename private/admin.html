@@ -25,7 +25,23 @@
         .product-row button { border: none; border-radius: 5px; padding: 6px 12px; cursor: pointer; }
         .edit-btn { background-color: rgb(230, 230, 230); margin-right: 5px; }
         .delete-btn { background-color: rgb(250, 210, 210); }
-        .order-row { padding: 8px 0; border-bottom: 1px solid rgb(235, 235, 235); font-size: 15px; }
+        .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        .filter-btn { border: none; border-radius: 20px; padding: 7px 14px; cursor: pointer; background: rgb(235, 235, 235); font-size: 14px; }
+        .filter-btn.active { background: rgb(180, 220, 235); font-weight: bold; }
+        .order-card { border: 1px solid rgb(228, 228, 228); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+        .order-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+        .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+        .badge { padding: 3px 9px; border-radius: 5px; font-size: 13px; }
+        .badge.paid { background: rgb(210, 240, 210); color: rgb(30, 110, 30); }
+        .badge.pending { background: rgb(250, 235, 200); color: rgb(150, 110, 20); }
+        .badge.failed { background: rgb(250, 210, 210); color: rgb(150, 30, 30); }
+        .badge.sent { background: rgb(205, 225, 250); color: rgb(25, 70, 140); }
+        .badge.prep { background: rgb(235, 235, 235); color: rgb(80, 80, 80); }
+        .order-line { margin: 6px 0 0 0; font-size: 14px; color: rgb(60, 60, 60); }
+        .order-actions { margin-top: 10px; }
+        .order-actions button { border: none; border-radius: 6px; padding: 9px 16px; cursor: pointer; font-size: 14px; background: rgb(180, 220, 235); }
+        .order-actions button.secondary { background: rgb(235, 235, 235); }
+        .order-actions button:disabled { background: rgb(228, 228, 228); color: gray; cursor: not-allowed; }
         .error-message { color: rgb(180, 40, 40); margin-top: 10px; }
         .hint { font-size: 13px; color: gray; margin: 4px 0 0 0; }
         @media (max-width: 860px) {
@@ -82,7 +98,13 @@
                 <div id="productList">Loading...</div>
             </div>
             <div class="list-card">
-                <h2>Recent Orders</h2>
+                <h2>Orders</h2>
+                <div class="filters" id="orderFilters">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="tosend">To send</button>
+                    <button class="filter-btn" data-filter="sent">Sent</button>
+                    <button class="filter-btn" data-filter="unpaid">Unpaid</button>
+                </div>
                 <div id="orderList">Loading...</div>
             </div>
         </div>
@@ -138,27 +160,104 @@
             });
         }
 
+        let orders = [];
+        let orderFilter = 'all';
+
+        const isPaid = o => o.payment_status === 'COMPLETE';
+        const isSent = o => o.order_status === 'SENT';
+        const filters = {
+            all: () => true,
+            tosend: o => isPaid(o) && !isSent(o),
+            sent: o => isSent(o),
+            unpaid: o => !isPaid(o),
+        };
+
         async function loadOrders() {
             const listDiv = document.getElementById('orderList');
             const result = await api('/api/orders?all=1');
             if (!result) return;
-            const orders = result.data.orders || [];
-            if (orders.length === 0) { listDiv.innerHTML = '<p>No orders yet.</p>'; return; }
+            if (!result.ok) {
+                listDiv.innerHTML = `<p>Could not load orders. ${esc(result.data.detail || '')}</p>`;
+                return;
+            }
+            orders = result.data.orders || [];
+            renderOrders();
+        }
+
+        function renderOrders() {
+            const listDiv = document.getElementById('orderList');
+
+            // filter buttons with live counts
+            const labels = { all: 'All', tosend: 'To send', sent: 'Sent', unpaid: 'Unpaid' };
+            document.querySelectorAll('#orderFilters .filter-btn').forEach(btn => {
+                const key = btn.dataset.filter;
+                btn.textContent = `${labels[key]} (${orders.filter(filters[key]).length})`;
+                btn.classList.toggle('active', key === orderFilter);
+            });
+
+            const shown = orders.filter(filters[orderFilter]);
+            if (shown.length === 0) { listDiv.innerHTML = '<p>No orders here.</p>'; return; }
 
             listDiv.innerHTML = '';
-            orders.forEach(o => {
-                const row = document.createElement('div');
-                row.className = 'order-row';
-                row.innerHTML = `
-                    <strong>${esc(String(o.id).slice(0, 8))}</strong> &middot;
-                    ${esc(o.users ? o.users.username : 'unknown')} &middot;
-                    R${Number(o.total).toFixed(2)} &middot;
-                    ${esc(o.payment_status)} &middot;
-                    ${esc(new Date(o.created_at).toLocaleDateString())}
+            shown.forEach(o => {
+                const pay = String(o.payment_status || 'PENDING').toUpperCase();
+                const payClass = pay === 'COMPLETE' ? 'paid' : (pay === 'PENDING' ? 'pending' : 'failed');
+                const items = (o.items || []).map(i => `${esc(i.name)} x${Number(i.quantity)}`).join(', ');
+                const customer = o.users ? `${esc(o.users.username)} (${esc(o.users.cellphone)})` : 'Unknown customer';
+
+                const card = document.createElement('div');
+                card.className = 'order-card';
+                card.innerHTML = `
+                    <div class="order-top">
+                        <strong>Order ${esc(String(o.id).slice(0, 8))}</strong>
+                        <div class="badges">
+                            <span class="badge ${payClass}">${esc(pay === 'COMPLETE' ? 'PAID' : pay)}</span>
+                            ${isPaid(o) ? (isSent(o) ? '<span class="badge sent">SENT</span>' : '<span class="badge prep">TO SEND</span>') : ''}
+                        </div>
+                    </div>
+                    <p class="order-line"><b>Customer:</b> ${customer}</p>
+                    <p class="order-line"><b>Items:</b> ${items}</p>
+                    <p class="order-line"><b>Total:</b> R${Number(o.total).toFixed(2)}</p>
+                    <p class="order-line"><b>Deliver to:</b><br>${esc(o.delivery_address || '').replace(/\n/g, '<br>')}</p>
+                    <p class="order-line"><b>Placed:</b> ${esc(new Date(o.created_at).toLocaleString())}${o.sent_at ? ' &middot; <b>Sent:</b> ' + esc(new Date(o.sent_at).toLocaleString()) : ''}</p>
+                    <div class="order-actions"></div>
                 `;
-                listDiv.appendChild(row);
+
+                const actions = card.querySelector('.order-actions');
+                const btn = document.createElement('button');
+                if (isSent(o)) {
+                    btn.textContent = 'Undo sent';
+                    btn.className = 'secondary';
+                    btn.onclick = () => setOrderStatus(o.id, 'PROCESSING', btn);
+                } else if (isPaid(o)) {
+                    btn.textContent = 'Mark as sent';
+                    btn.onclick = () => setOrderStatus(o.id, 'SENT', btn);
+                } else {
+                    btn.textContent = 'Waiting for payment';
+                    btn.disabled = true;
+                }
+                actions.appendChild(btn);
+                listDiv.appendChild(card);
             });
         }
+
+        async function setOrderStatus(id, status, btn) {
+            btn.disabled = true;
+            const result = await api('/api/orders', { method: 'PATCH', body: JSON.stringify({ id, status }) });
+            if (!result) return;
+            if (!result.ok) {
+                alert(result.data.error || 'Could not update the order.' + (result.data.detail ? ' (' + result.data.detail + ')' : ''));
+                btn.disabled = false;
+                return;
+            }
+            const o = orders.find(x => x.id === id);
+            if (o) { o.order_status = result.data.order.order_status; o.sent_at = result.data.order.sent_at; }
+            renderOrders();
+        }
+
+        document.querySelectorAll('#orderFilters .filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => { orderFilter = btn.dataset.filter; renderOrders(); });
+        });
 
         function editProduct(id) {
             const p = products.find(x => x.id === id);
@@ -220,7 +319,7 @@
                     imageUrl = upload.data.url;
                 }
 
-                const result = await api(id ? `/api/products/${id}` : '/api/products', {
+                const result = await api(id ? `/api/products?id=${encodeURIComponent(id)}` : '/api/products', {
                     method: id ? 'PUT' : 'POST',
                     body: JSON.stringify({ name, price, category, stock, description, imageUrl }),
                 });
@@ -237,7 +336,7 @@
 
         async function deleteProduct(id) {
             if (!confirm('Delete this product?')) return;
-            const result = await api(`/api/products/${id}`, { method: 'DELETE' });
+            const result = await api(`/api/products?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
             if (result && !result.ok) alert(result.data.error || 'Could not delete product.');
             loadProducts();
         }

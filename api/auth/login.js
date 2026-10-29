@@ -1,8 +1,4 @@
 // POST /api/auth/login  { username, password }
-//
-// TWO_FA_ENABLED=false (default): password correct -> logged in immediately.
-// TWO_FA_ENABLED=true : password correct -> SMS code sent via Telesign, the
-//   person is NOT logged in until /api/telesign/verify-code succeeds.
 import bcrypt from 'bcryptjs';
 import { supabaseAdmin } from '../../lib/supabaseAdmin.js';
 import { startSession, startPending } from '../../lib/session.js';

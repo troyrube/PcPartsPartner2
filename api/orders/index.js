@@ -3,7 +3,7 @@
 // POST /api/orders          -> create an order  { items:[{productId, quantity}], deliveryAddress }
 // PATCH /api/orders         -> admin only: { id, status:'SENT'|'PROCESSING' } mark a paid order as sent
 //
-// Prices and the total are read from the database here, never trusted from the browser.
+// Prices and the total are read from the database here
 import { supabaseAdmin } from '../../lib/supabaseAdmin.js';
 import { requireSession } from '../../lib/session.js';
 
@@ -39,7 +39,6 @@ export default async function handler(req, res) {
     if (!items.length) return res.status(400).json({ error: 'Your cart is empty.' });
     if (!deliveryAddress) return res.status(400).json({ error: 'Delivery address is required.' });
 
-    // merge duplicate lines and validate quantities
     const wanted = {};
     for (const line of items) {
       const qty = Number(line.quantity);

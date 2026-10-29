@@ -57,8 +57,6 @@
         }
         function getCart() { return JSON.parse(localStorage.getItem('cart') || '[]'); }
 
-        // The total shown here is for display only. The server works out the real
-        // total from the database prices when the order is created.
         function renderOrder() {
             const cart = getCart();
             const linesDiv = document.getElementById('orderLines');
@@ -120,7 +118,6 @@
                 if (!pay) return;
                 if (!pay.ok) { errorMsg.textContent = pay.data.error || 'Could not start payment.'; payBtn.disabled = false; return; }
 
-                // The order is created, so the cart can be cleared before leaving for PayFast
                 localStorage.removeItem('cart');
 
                 const form = document.createElement('form');

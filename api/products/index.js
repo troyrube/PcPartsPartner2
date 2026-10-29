@@ -32,8 +32,6 @@ export default async function handler(req, res) {
 
     let query = supabaseAdmin
       .from('products').select('*').order('created_at', { ascending: false });
-    // Customers never see sold-out products. Admins see everything on the
-    // admin page, but the shop page asks for ?inStock=1 so it hides them too.
     if (!session.admin || req.query.inStock === '1') query = query.gt('stock', 0);
 
     const { data, error } = await query;

@@ -3,7 +3,6 @@
 import bcrypt from 'bcryptjs';
 import { supabaseAdmin } from '../../lib/supabaseAdmin.js';
 
-// 0821234567 -> 27821234567 ; +27 82 123 4567 -> 27821234567
 function normalisePhone(raw) {
   let p = String(raw || '').replace(/[\s+\-()]/g, '');
   if (/^0\d{9}$/.test(p)) p = '27' + p.slice(1);
